@@ -2,59 +2,106 @@
 
 import { motion, useMotionValue } from "framer-motion";
 import { Bell, Search, UserCircle2, Volume2, VolumeX } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { ASSETS, totalUsd, vibeCheck } from "@/lib/mockData";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isMuted, sounds, toggleMuted } from "@/lib/sounds";
 import { selection } from "@/lib/haptics";
 import { ActionButtons } from "./ActionButtons";
-import { AssetRow } from "./AssetRow";
 import { FloatingBalance } from "./FloatingBalance";
 import { SkeletonRow } from "./SkeletonCard";
 import { SwapModal } from "./SwapModal";
 import { TabBar, type Tab } from "./TabBar";
 import { VibeDiamond } from "./VibeDiamond";
 import { VibeSendSheet } from "./VibeSendSheet";
+import { DepositSheet } from "./DepositSheet";
+import { TransactionHistory } from "./TransactionHistory";
+import type { Transaction } from "@/lib/store";
 
 const VIBE_STATUSES = [
   "Diamond Hands",
   "Steady Climber",
   "Ape In Mode",
   "Whale Mode",
-  "Paper Hands",
   "HODL & Pray",
 ];
+
+function generateUserId(): string {
+  if (typeof window === "undefined") return "anon";
+  const key = "lp.userId";
+  let id = localStorage.getItem(key);
+  if (id) return id;
+
+  // Try to get Telegram user ID
+  const tg = (window as unknown as { Telegram?: { WebApp?: { initDataUnsafe?: { user?: { id?: number } } } } }).Telegram;
+  if (tg?.WebApp?.initDataUnsafe?.user?.id) {
+    id = `tg-${tg.WebApp.initDataUnsafe.user.id}`;
+  } else {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    id = "u-";
+    for (let i = 0; i < 8; i++) {
+      id += chars[Math.floor(Math.random() * chars.length)];
+    }
+  }
+  localStorage.setItem(key, id);
+  return id;
+}
 
 export function Dashboard() {
   const [tab, setTab] = useState<Tab>("wallet");
   const [swapOpen, setSwapOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [depositOpen, setDepositOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [muted, setMuted] = useState(() =>
     typeof window === "undefined" ? false : isMuted(),
   );
   const [vibeIdx, setVibeIdx] = useState(0);
+  const [balance, setBalance] = useState(0);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [userId, setUserId] = useState("anon");
   const scrollY = useMotionValue(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Aggregate 24h change weighted by USD value
-  const total = totalUsd();
-  const change =
-    ASSETS.reduce(
-      (s, a) =>
-        s +
-        a.change24h *
-          a.holdings.reduce((acc, h) => acc + h.usd, 0),
-      0,
-    ) / total;
+  const currentVibe = VIBE_STATUSES[vibeIdx];
 
-  // Default vibe based on portfolio dynamics, cycled by tap.
-  const baseVibe = vibeCheck(total, change).replace(/[^\w\s]/g, "").trim();
-  const currentVibe = vibeIdx === 0 ? baseVibe : VIBE_STATUSES[vibeIdx];
+  const fetchBalance = useCallback(async (uid: string) => {
+    try {
+      const res = await fetch(`/api/balance?userId=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (res.ok) setBalance(data.balance);
+    } catch {
+      /* offline or error */
+    }
+  }, []);
+
+  const fetchTransactions = useCallback(async (uid: string) => {
+    try {
+      const res = await fetch(`/api/transactions?userId=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      if (res.ok) setTransactions(data.transactions);
+    } catch {
+      /* offline or error */
+    }
+  }, []);
 
   useEffect(() => {
+    const uid = generateUserId();
+    setUserId(uid);
+
+    fetch("/api/user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: uid }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        setBalance(data.balance ?? 0);
+      })
+      .catch(() => {});
+
+    fetchTransactions(uid);
     const t = setTimeout(() => setLoading(false), 700);
     return () => clearTimeout(t);
-  }, []);
+  }, [fetchTransactions]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -63,6 +110,11 @@ export function Dashboard() {
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, [scrollY]);
+
+  function handleDeposited() {
+    fetchBalance(userId);
+    fetchTransactions(userId);
+  }
 
   return (
     <div className="relative z-10 mx-auto flex h-dvh max-w-md flex-col">
@@ -107,7 +159,7 @@ export function Dashboard() {
       >
         {tab === "wallet" && (
           <>
-            <FloatingBalance total={total} change24h={change} scrollY={scrollY} />
+            <FloatingBalance total={balance} scrollY={scrollY} />
 
             <div className="mt-5">
               <ActionButtons
@@ -123,9 +175,9 @@ export function Dashboard() {
                   sounds.open();
                   setSwapOpen(true);
                 }}
-                onBuy={() => {
+                onDeposit={() => {
                   sounds.open();
-                  setSwapOpen(true);
+                  setDepositOpen(true);
                 }}
               />
             </div>
@@ -174,27 +226,16 @@ export function Dashboard() {
               </motion.div>
             </div>
 
-            <div className="mt-5 flex items-center justify-between px-1">
-              <h2 className="text-sm font-semibold tracking-tight text-slate-700">
-                Assets
-              </h2>
-              <button className="text-xs text-slate-500">Manage</button>
-            </div>
-
-            <ul className="mt-2 flex flex-col gap-2.5">
-              {loading
-                ? Array.from({ length: 4 }).map((_, i) => (
-                    <SkeletonRow key={i} />
-                  ))
-                : ASSETS.map((a, i) => (
-                    <AssetRow
-                      key={a.symbol}
-                      asset={a}
-                      index={i}
-                      scrollY={scrollY}
-                    />
-                  ))}
-            </ul>
+            {/* Transaction History */}
+            {loading ? (
+              <ul className="mt-5 flex flex-col gap-2.5">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <SkeletonRow key={i} />
+                ))}
+              </ul>
+            ) : (
+              <TransactionHistory transactions={transactions} />
+            )}
           </>
         )}
 
@@ -235,6 +276,13 @@ export function Dashboard() {
         key={sendOpen ? "send-open" : "send-closed"}
         open={sendOpen}
         onClose={() => setSendOpen(false)}
+      />
+      <DepositSheet
+        key={depositOpen ? "deposit-open" : "deposit-closed"}
+        open={depositOpen}
+        onClose={() => setDepositOpen(false)}
+        userId={userId}
+        onDeposited={handleDeposited}
       />
     </div>
   );

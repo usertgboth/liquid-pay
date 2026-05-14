@@ -2,39 +2,20 @@
 
 import { motion, useTransform, type MotionValue } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { selection } from "@/lib/haptics";
 import { sounds } from "@/lib/sounds";
 import { AnimatedNumber } from "./AnimatedNumber";
 
 interface Props {
   total: number;
-  change24h: number;
   scrollY: MotionValue<number>;
 }
 
-export function FloatingBalance({ total, change24h, scrollY }: Props) {
+export function FloatingBalance({ total, scrollY }: Props) {
   const [hidden, setHidden] = useState(false);
-  const [shownTotal, setShownTotal] = useState(total);
   const scale = useTransform(scrollY, [0, 160], [1, 0.62]);
   const y = useTransform(scrollY, [0, 160], [0, -36]);
-  const opacityVibe = useTransform(scrollY, [0, 80], [1, 0]);
-
-  // Simulate live cross-chain balance updates with very small jitter so the
-  // tabular-nums digits actually flow.
-  useEffect(() => {
-    const id = setInterval(() => {
-      const jitter = (Math.random() - 0.5) * total * 0.0009;
-      setShownTotal((v) => {
-        const target = total + jitter;
-        // ease toward target so we never drift far from base
-        return v + (target - v) * 0.6;
-      });
-    }, 2200);
-    return () => clearInterval(id);
-  }, [total]);
-
-  const positive = change24h >= 0;
 
   return (
     <motion.section
@@ -42,7 +23,7 @@ export function FloatingBalance({ total, change24h, scrollY }: Props) {
       className="relative flex flex-col items-center pt-6 pb-2 origin-top"
     >
       <span className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-        Total Balance
+        Balance
       </span>
       <div className="flex items-end gap-2">
         <motion.h1
@@ -58,9 +39,9 @@ export function FloatingBalance({ total, change24h, scrollY }: Props) {
           }}
         >
           {hidden ? (
-            "••••••"
+            "******"
           ) : (
-            <AnimatedNumber value={shownTotal} prefix="$" duration={1.4} />
+            <AnimatedNumber value={total} prefix="" duration={1.4} />
           )}
         </motion.h1>
         <button
@@ -75,20 +56,15 @@ export function FloatingBalance({ total, change24h, scrollY }: Props) {
           {hidden ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>
       </div>
-
-      <motion.div
-        style={{ opacity: opacityVibe }}
-        className="mt-3 flex items-center gap-2"
-      >
+      <div className="mt-1 flex items-center gap-1.5">
         <span
-          className={`rounded-full px-3 py-1 text-xs font-medium tabular-nums ${
-            positive ? "text-emerald-600" : "text-rose-600"
-          } glass`}
+          className="grid h-5 w-5 place-items-center rounded-full text-[8px] font-bold text-white"
+          style={{ background: "#26A17B" }}
         >
-          {positive ? "+" : ""}
-          {change24h.toFixed(2)}% · 24h
+          ₮
         </span>
-      </motion.div>
+        <span className="text-sm font-semibold text-slate-500">USDT</span>
+      </div>
     </motion.section>
   );
 }
