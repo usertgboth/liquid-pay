@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowDownToLine, ArrowUpFromLine, Repeat2, Plus } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Repeat2, Wallet } from "lucide-react";
 import type React from "react";
 import { impact } from "@/lib/haptics";
 
@@ -9,7 +9,7 @@ interface Props {
   onSwap: () => void;
   onSend: () => void;
   onReceive: () => void;
-  onBuy: () => void;
+  onDeposit: () => void;
 }
 
 interface Action {
@@ -21,14 +21,21 @@ interface Action {
   halo: string;
 }
 
-export function ActionButtons({ onSwap, onSend, onReceive, onBuy }: Props) {
+export function ActionButtons({ onSwap, onSend, onReceive, onDeposit }: Props) {
   const actions: Action[] = [
+    {
+      key: "deposit",
+      label: "Deposit",
+      Icon: Wallet,
+      onClick: onDeposit,
+      liquid: true,
+      halo: "rgba(38, 161, 123, 0.55)",
+    },
     {
       key: "send",
       label: "Send",
       Icon: ArrowUpFromLine,
       onClick: onSend,
-      liquid: true,
       halo: "rgba(220, 230, 255, 0.55)",
     },
     {
@@ -44,13 +51,6 @@ export function ActionButtons({ onSwap, onSend, onReceive, onBuy }: Props) {
       Icon: Repeat2,
       onClick: onSwap,
       halo: "rgba(140, 170, 230, 0.55)",
-    },
-    {
-      key: "buy",
-      label: "Buy",
-      Icon: Plus,
-      onClick: onBuy,
-      halo: "rgba(153, 69, 255, 0.55)",
     },
   ];
 
